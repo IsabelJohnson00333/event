@@ -116,8 +116,8 @@ export default function QuestionsScreen() {
       
 
       {/* Main */}
-      <main className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 py-8 sm:py-12">
-        <div className="w-full max-w-[640px] flex flex-col gap-10">
+      <main className="flex-1 flex flex-col items-center justify-start px-4 sm:px-6 pt-6 pb-10">
+        <div className="w-full max-w-[640px] flex flex-col gap-6 sm:gap-10">
           {/* Progress */}
           <div className="flex flex-col gap-4">
             <div className="flex justify-between items-end">
