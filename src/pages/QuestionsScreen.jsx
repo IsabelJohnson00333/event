@@ -117,13 +117,6 @@ export default function QuestionsScreen() {
 
       {/* Main */}
       <main className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 py-8 sm:py-12">
-        <button
-          onClick={() => navigate("/")}
-          className="fixed top-4 right-4 z-50 flex items-center justify-center w-10 h-10 rounded-full bg-white shadow-md text-gray-600 active:scale-95"
-          aria-label="Close"
-        >
-          <span className="material-symbols-outlined">close</span>
-        </button>
         <div className="w-full max-w-[640px] flex flex-col gap-10">
           {/* Progress */}
           <div className="flex flex-col gap-4">

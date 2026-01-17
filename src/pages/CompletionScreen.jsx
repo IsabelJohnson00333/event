@@ -26,34 +26,45 @@ export default function CompletionScreen() {
   const [result, setResult] = useState(null);
 
   useEffect(() => {
-    const fetchResult = async () => {
-      const sessionId = localStorage.getItem("session_id");
-      console.log("CompletionScreen sessionId:", sessionId);
-
-      // Moved the check to inside the fetch logic
-      if (!sessionId) {
-        console.log("No sessionId found");
-        setResult(null); // Explicitly set result to null if no session ID
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("response_sessions")
-        .select("score, grade")
-        .eq("id", sessionId)
-        .maybeSingle();
-
-      console.log("Fetched data:", data);
-
-      if (error) {
-        console.error(error);
-        setResult(null); // Explicitly set result to null on error
-        return;
-      }
-
-      setResult(data); // ← THIS LINE IS REQUIRED
-    };
-
+          const fetchResult = async () => {
+            const sessionId = localStorage.getItem("session_id");
+            console.log("CompletionScreen sessionId:", sessionId);
+    
+            // Moved the check to inside the fetch logic
+            if (!sessionId) {
+              console.log("No sessionId found");
+              setResult(null); // Explicitly set result to null if no session ID
+              return;
+            }
+    
+            // Fetch total questions
+            const { count: totalQuestions, error: totalQuestionsError } = await supabase
+              .from("questions")
+              .select("*", { count: "exact", head: true })
+              .eq("is_active", true);
+    
+            if (totalQuestionsError) {
+              console.error("Error fetching total questions:", totalQuestionsError);
+              setResult(null);
+              return;
+            }
+    
+            const { data, error } = await supabase
+              .from("response_sessions")
+              .select("score, grade")
+              .eq("id", sessionId)
+              .maybeSingle();
+    
+            console.log("Fetched data:", data);
+    
+            if (error) {
+              console.error(error);
+              setResult(null); // Explicitly set result to null on error
+              return;
+            }
+    
+            setResult({ ...data, totalQuestions }); // ← THIS LINE IS REQUIRED
+          };
     fetchResult();
   }, []);
 
@@ -80,7 +91,7 @@ export default function CompletionScreen() {
         <h1 className="text-3xl font-bold">Thank you</h1>
 
         <p className="mt-4 text-xl">
-          Score: <strong>{result.score}</strong>
+          Score: <strong>{result.score} / {result.totalQuestions}</strong>
         </p>
 
         {result.grade && (
