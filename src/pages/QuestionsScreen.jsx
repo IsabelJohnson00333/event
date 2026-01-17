@@ -45,72 +45,85 @@ export default function QuestionsScreen() {
   const progressPercent = Math.round((stepNumber / totalSteps) * 100);
 
   const submitAnswer = async (answer) => {
-    // 1. Try UPDATE first
-    const { error: updateError, count } = await supabase
+    const { error } = await supabase
       .from("responses")
-      .update({ answer })
-      .eq("session_id", sessionId)
-      .eq("question_id", question.id);
+      .upsert(
+        {
+          session_id: sessionId,
+          question_id: question.id,
+          answer,
+        },
+        { onConflict: "session_id,question_id" }
+      );
 
-    if (updateError) {
-      console.error("Update failed:", updateError);
+    if (error) {
+      console.error("Upsert failed:", error);
       return;
     }
 
-    // 2. If UPDATE affected 0 rows → INSERT
-    if (count === 0) {
-      const { error: insertError } = await supabase
-        .from("responses")
-        .insert({
-          session_id: sessionId,
-          question_id: question.id,
-          answer
-        });
-
-      if (insertError) {
-        console.error("Insert failed:", insertError);
-        return;
-      }
-    }
-
-    // 3. Advance ONLY after persistence succeeds
     if (currentIndex < questions.length - 1) {
-      setCurrentIndex(prev => prev + 1);
+      setCurrentIndex((prev) => prev + 1);
     } else {
-      await supabase
-        .from("response_sessions")
-        .update({ completed_at: new Date().toISOString() })
-        .eq("id", sessionId);
-
+      await finalizeSession();
       navigate("/complete");
+    }
+  };
+
+  const finalizeSession = async () => {
+    // 1. Get total questions
+    const { count: totalQuestions } = await supabase
+      .from("questions")
+      .select("*", { count: "exact", head: true })
+      .eq("is_active", true);
+
+    // 2. Sum YES answers
+    const { data: responses } = await supabase
+      .from("responses")
+      .select("answer")
+      .eq("session_id", sessionId);
+
+    const score = responses.reduce(
+      (sum, r) => sum + (r.answer ? 1 : 0),
+      0
+    );
+
+    const percentage = totalQuestions > 0 ? score / totalQuestions : 0;
+
+    // ✅ DEFAULT GRADE (THIS WAS MISSING)
+    let grade = "Poor";
+
+    if (percentage >= 0.75) grade = "Excellent";
+    else if (percentage >= 0.5) grade = "Good";
+    else if (percentage >= 0.25) grade = "Average";
+
+    // 3. Save score + grade
+    const { error: updateSessionError } = await supabase
+      .from("response_sessions")
+      .update({
+        score,
+        grade,
+        completed_at: new Date().toISOString()
+      })
+      .eq("id", sessionId);
+
+    if (updateSessionError) {
+      console.error("Error updating session in finalizeSession:", updateSessionError);
     }
   };
 
   return (
     <div className="bg-background-light dark:bg-background-dark min-h-screen flex flex-col transition-colors duration-300">
-      {/* Header */}
-      <header className="w-full bg-white/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 sticky top-0 z-50">
-        <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="size-8 bg-primary rounded-lg flex items-center justify-center text-white">
-              <span className="material-symbols-outlined text-xl">corporate_fare</span>
-            </div>
-            <h2 className="text-[#0e191b] dark:text-white text-lg font-bold">
-              BusinessInsights
-            </h2>
-          </div>
-
-          <button
-            onClick={() => navigate("/")}
-            className="flex items-center justify-center size-10 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300"
-          >
-            <span className="material-symbols-outlined">close</span>
-          </button>
-        </div>
-      </header>
+      
 
       {/* Main */}
-      <main className="flex-1 flex flex-col items-center justify-center px-6 py-12">
+      <main className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 py-8 sm:py-12">
+        <button
+          onClick={() => navigate("/")}
+          className="fixed top-4 right-4 z-50 flex items-center justify-center w-10 h-10 rounded-full bg-white shadow-md text-gray-600 active:scale-95"
+          aria-label="Close"
+        >
+          <span className="material-symbols-outlined">close</span>
+        </button>
         <div className="w-full max-w-[640px] flex flex-col gap-10">
           {/* Progress */}
           <div className="flex flex-col gap-4">
@@ -137,7 +150,7 @@ export default function QuestionsScreen() {
           </div>
 
           {/* Question Card */}
-          <div className="bg-white dark:bg-gray-900 rounded-xl p-10 md:p-14 question-card-shadow border border-gray-100 dark:border-gray-800 text-center">
+          <div className="bg-white dark:bg-gray-900 rounded-xl p-6 sm:p-10 question-card-shadow border border-gray-100 dark:border-gray-800 text-center">
             <h1 className="text-[#0e191b] dark:text-white text-3xl md:text-4xl font-bold">
               {question.text}
             </h1>

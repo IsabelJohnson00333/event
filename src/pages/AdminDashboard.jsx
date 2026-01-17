@@ -19,7 +19,9 @@ export default function AdminDashboard() {
             questions (
               text
             )
-          )
+          ),
+          score,
+          grade
         `)
         .order("started_at", { ascending: false });
 
@@ -53,6 +55,9 @@ export default function AdminDashboard() {
               <div>
                 <p className="text-sm text-gray-500">Session ID</p>
                 <p className="font-mono text-sm">{session.id}</p>
+                <p className="text-sm font-medium">
+                  Score: {session.score} · {session.grade}
+                </p>
               </div>
 
               <span
