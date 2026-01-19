@@ -1,40 +1,101 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 
+const fetchHeatmapData = async () => {
+  const { data, error } = await supabase
+    .from("questions")
+    .select(`
+      id,
+      text,
+      responses (
+        answer
+      )
+    `);
+
+  if (error) {
+    console.error(error);
+    return [];
+  }
+
+  return data.map(q => {
+    const total = q.responses.length;
+    const yes = q.responses.filter(r => r.answer === true).length;
+    const no = total - yes;
+    const ratio = total > 0 ? yes / total : 0;
+
+    return {
+      question: q.text,
+      yes,
+      no,
+      total,
+      ratio
+    };
+  });
+};
+
+const getHeatColor = (ratio) => {
+  if (ratio >= 0.75) return "bg-green-600";
+  if (ratio >= 0.5) return "bg-green-400";
+  if (ratio >= 0.25) return "bg-yellow-400";
+  return "bg-red-400";
+};
+
 export default function AdminDashboard() {
   const [sessions, setSessions] = useState([]);
+  const [questionStats, setQuestionStats] = useState([]); // New state for question statistics
+  const [heatmapData, setHeatmapData] = useState([]); // New state for heatmap data
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchData = async () => {
-      const { data, error } = await supabase
-        .from("response_sessions")
-        .select(`
-          id,
-          started_at,
-          completed_at,
-          responses (
-            answer,
-            answered_at,
-            questions (
-              text
-            )
-          ),
-          score,
-          grade
-        `)
-        .order("started_at", { ascending: false });
+    const fetchDataAndStats = async () => {
+      setLoading(true);
+      const [sessionResponse, statsResponse, heatmapResponse] = await Promise.all([
+        supabase
+          .from("response_sessions")
+          .select(`
+            id,
+            started_at,
+            completed_at,
+            responses (
+              answer,
+              answered_at,
+              questions (
+                text
+              )
+            ),
+            score,
+            grade
+          `)
+          .order("started_at", { ascending: false }),
+        supabase.rpc("question_answer_stats"),
+        fetchHeatmapData()
+      ]);
 
-      if (error) {
-        console.error("Failed to load dashboard data:", error);
+      if (sessionResponse.error) {
+        console.error("Failed to load dashboard data:", sessionResponse.error);
+        setLoading(false);
         return;
       }
+      setSessions(sessionResponse.data);
 
-      setSessions(data);
+      if (statsResponse.error) {
+        console.error("Failed to load question stats:", statsResponse.error);
+        setLoading(false);
+        return;
+      }
+      setQuestionStats(statsResponse.data);
+
+      if (heatmapResponse && heatmapResponse.error) { // fetchHeatmapData returns array, not object with error
+        console.error("Failed to load heatmap data:", heatmapResponse.error);
+        setLoading(false);
+        return;
+      }
+      setHeatmapData(heatmapResponse); // heatmapResponse is already the data array
+
       setLoading(false);
     };
 
-    fetchData();
+    fetchDataAndStats();
   }, []);
 
   if (loading) {
@@ -45,6 +106,58 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-background-light px-8 py-10">
       <h1 className="text-3xl font-bold mb-8">Admin Dashboard</h1>
 
+      <h2 className="text-2xl font-semibold mb-4">Question Statistics</h2>
+      <div className="mb-8">
+        <table className="w-full border rounded-xl overflow-hidden">
+          <thead className="bg-gray-100">
+            <tr>
+              <th className="px-4 py-2 text-left">Question</th>
+              <th className="px-4 py-2 text-center">YES</th>
+              <th className="px-4 py-2 text-center">NO</th>
+              <th className="px-4 py-2 text-center">YES %</th>
+            </tr>
+          </thead>
+          <tbody>
+            {questionStats.map(q => (
+              <tr key={q.question} className="border-t">
+                <td className="px-4 py-2">{q.question}</td>
+                <td className="px-4 py-2 text-green-600 text-center">{q.yes_count}</td>
+                <td className="px-4 py-2 text-red-600 text-center">{q.no_count}</td>
+                <td className="px-4 py-2 text-center">
+                  {q.total > 0 ? Math.round((q.yes_count / q.total) * 100) : 0}%
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <h2 className="text-2xl font-semibold mb-4">YES-Intensity Heatmap</h2>
+      <div className="space-y-6 mb-8">
+        {heatmapData.map((q, index) => (
+          <div
+            key={index}
+            className="p-4 rounded-xl border bg-white shadow-sm"
+          >
+            <p className="font-semibold mb-2">{q.question}</p>
+
+            <div className="flex justify-between text-sm mb-2">
+              <span>YES: {q.yes}</span>
+              <span>NO: {q.no}</span>
+              <span>{Math.round(q.ratio * 100)}%</span>
+            </div>
+
+            <div className="w-full h-3 bg-gray-200 rounded">
+              <div
+                className={`h-3 rounded ${getHeatColor(q.ratio)}`}
+                style={{ width: `${q.ratio * 100}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <h2 className="text-2xl font-semibold mb-4">Session Details</h2>
       <div className="space-y-8">
         {sessions.map(session => (
           <div
